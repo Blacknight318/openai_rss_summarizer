@@ -2,19 +2,20 @@ import json
 import openai
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-import feedparser
-from newspaper import Article
+import feedparser # type: ignore
+from newspaper import Article # type: ignore
 import sqlite3
 from datetime import datetime
 import time
+from typing import Dict, Any, NamedTuple, cast
 
 
-def load_config():
+def load_config() -> Dict[str, Any]:
     with open('config.json', 'r') as file:
         return json.load(file)
 
 
-def create_database():
+def create_database() -> None:
     conn = sqlite3.connect('articles.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS articles
@@ -23,7 +24,7 @@ def create_database():
     conn.close()
 
 
-def is_article_summarized(link):
+def is_article_summarized(link: str) -> bool:
     conn = sqlite3.connect('articles.db')
     c = conn.cursor()
     c.execute("SELECT * FROM articles WHERE link = ?", (link,))
@@ -32,7 +33,7 @@ def is_article_summarized(link):
     return result
 
 
-def save_summary(link, title, summary):
+def save_summary(link: str, title: str, summary: str) -> None:
     conn = sqlite3.connect('articles.db')
     c = conn.cursor()
     c.execute("INSERT INTO articles (link, title, summary) VALUES (?, ?, ?)", (link, title, summary))
@@ -40,7 +41,7 @@ def save_summary(link, title, summary):
     conn.close()
 
 
-def create_thread(ass_id, prompt):
+def create_thread(ass_id: str, prompt: str) -> tuple[str, str]:
     thread = openai.beta.threads.create()
     my_thread_id = thread.id
 
@@ -58,7 +59,7 @@ def create_thread(ass_id, prompt):
     return run.id, my_thread_id
 
 
-def check_status(run_id, thread_id):
+def check_status(run_id: str, thread_id: str) -> str:
     run = openai.beta.threads.runs.retrieve(
         thread_id=thread_id,
         run_id=run_id,
@@ -66,7 +67,7 @@ def check_status(run_id, thread_id):
     return run.status
 
 
-def send_message_to_slack(title, link, summary):
+def send_message_to_slack(title: str, link: str, summary: str) -> None:
     try:
         message = f"New Article: *<{link}|{title}>*\nSummary: {summary}"
         client.chat_postMessage(channel='#news', text=message)
@@ -74,7 +75,7 @@ def send_message_to_slack(title, link, summary):
         print(f"Error sending message: {e.response['error']}")
 
 
-def fetch_articles_from_rss(rss_url):
+def fetch_articles_from_rss(rss_url: str) -> None:
     feed = feedparser.parse(rss_url)
     for entry in feed.entries:
         if not is_article_summarized(entry.link):
@@ -96,7 +97,9 @@ def fetch_articles_from_rss(rss_url):
 
             response = openai.beta.threads.messages.list(thread_id=thread_id)
             if response.data:
-                summary = response.data[0].content[0].text.value
+                content = cast(Any, response.data[0].content[0])
+                summary = content.text.value
+                # summary = response.data[0].content[0].text.value
                 # Send the article details to Slack
                 send_message_to_slack(entry.title, entry.link, summary)
                 save_summary(entry.link, entry.title, summary)
@@ -104,7 +107,7 @@ def fetch_articles_from_rss(rss_url):
             time.sleep(20)
 
 
-def main():
+def main() -> None:
     create_database()
     while True:
         now = datetime.now()
