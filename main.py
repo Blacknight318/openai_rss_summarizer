@@ -82,6 +82,10 @@ def fetch_articles_from_rss(rss_url):
             article.download()
             article.parse()
 
+            # Truncate the article text if it exceeds the limit
+            max_length = 32768 - len(entry.title) - len("Please summarize this article:\n\nTitle: \n\n")
+            article_text = article.text[:max_length] if len(article.text) > max_length else article.text
+
             prompt = f"Please summarize this article:\n\nTitle: {entry.title}\n\n{article.text}"
             run_id, thread_id = create_thread(assistant_id, prompt)
 
