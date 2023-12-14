@@ -161,3 +161,5 @@ cython_debug/
 articles.db
 config.json
 nohup.out
+
+pypy3/
